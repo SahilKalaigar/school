@@ -99,9 +99,16 @@ async def feesReport(response: Response):
 
 # get all student marks (first_name,last_name,class_name,exam name,average obtained marks, total marks)
 @router.get("/marks")
-async def getMarks():
+async def getMarks(request:Request):
     try:
+        query = {}
+        # check student_id is present in query string 
+        if request.query_params.get('student_id') != "":
+            query['student_id'] = ObjectId(request.query_params.get('student_id'))
         marks = list(db['student_marks'].aggregate([
+            {
+                '$match': query
+            },
             {
                 '$lookup': {
                     'from': 'students', 
@@ -258,7 +265,7 @@ async def deleteStudent(id):
 async def login(request:Request):
     try:
         body = await request.json()
-        student = db['students'].find_one({"roll_number":body['roll_no'],"class_id":body['class_id'],"password":body['password']})
+        student = db['students'].find_one({"roll_number":body['roll_no'],"class_id":ObjectId(body['class_id']),"password":body['password']})
         if student:
             return {"status" : True ,"message" : "Student found" ,"data":json.loads(json.dumps(student,default=str)),"type":"student"}
         else:
@@ -285,6 +292,70 @@ async def attendance(request:Request):
         body['created_at'] = int(time.time())
         db['student_attendance'].insert_one(body)
         return {"status" : True ,"message" : "Attendance added" }
+    except Exception as e:
+        print(e)
+        return {"status" : False ,"message" : "Something wrong"}
+
+#get specific student attendance
+@router.get("/attendance/{student_id}")
+async def getAttendance(student_id):
+    try:
+        attendance = list(db['student_attendance'].aggregate([
+            {
+                '$unwind': {
+                    'path': '$attendance'
+                }
+            }, {
+                '$match': {
+                    'attendance.student_id': ObjectId(student_id)
+                }
+            }, {
+                '$project': {
+                    'date': 1, 
+                    'class_id': 1, 
+                    'student_id': '$attendance.student_id', 
+                    'status': '$attendance.status'
+                }
+            }, {
+                '$lookup': {
+                    'from': 'class', 
+                    'localField': 'class_id', 
+                    'foreignField': '_id', 
+                    'as': 'result'
+                }
+            }, {
+                '$lookup': {
+                    'from': 'students', 
+                    'localField': 'student_id', 
+                    'foreignField': '_id', 
+                    'as': 'student_result'
+                }
+            }, {
+                '$project': {
+                    'status': 1, 
+                    'class': {
+                        '$arrayElemAt': [
+                            '$result.name', 0
+                        ]
+                    }, 
+                    'name': {
+                        '$concat': [
+                            {
+                                '$arrayElemAt': [
+                                    '$student_result.first_name', 0
+                                ]
+                            }, ' ', {
+                                '$arrayElemAt': [
+                                    '$student_result.last_name', 0
+                                ]
+                            }
+                        ]
+                    }, 
+                    'date': 1
+                }
+            }
+        ]))
+        return {"status" : True ,"message" : "Attendance found" ,"data":json.loads(json.dumps(attendance,default=str))}
     except Exception as e:
         print(e)
         return {"status" : False ,"message" : "Something wrong"}
