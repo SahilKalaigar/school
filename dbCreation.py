@@ -48,7 +48,7 @@ def create_fee_structure():
         for class_ in class_list:
             db['fees_structure'].insert_one({
                 "class_id": class_['_id'],
-                "fee": 10000 * int(class_['name'][:-2]),
+                "amount": 10000 * int(class_['name'][:-2]),
                 "created_at": int(time.time())
             })
         print("Fee structure created")
