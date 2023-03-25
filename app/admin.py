@@ -103,7 +103,8 @@ async def getFees():
                             'foreignField': '_id', 
                             'as': 'result'
                         }
-                    }, {
+                    }, 
+                    {
                         '$project': {
                             'class_id': 1, 
                             'amount': 1, 
@@ -116,6 +117,45 @@ async def getFees():
                     }
                 ]))
         return {"status" : True ,"message" : "Fees structure found" ,"data":json.loads(json.dumps(fees,default=str))}
+    except Exception as e:
+        return {"status" : False ,"message" : "Something wrong"}
+
+# get student paid fees (student name , class name , paid amount)
+@router.get("/fees/paid")
+async def getFeesPaid():
+    try:
+        fees = list(db['student_fees'].aggregate([
+                    {
+                        '$lookup': {
+                            'from': 'students', 
+                            'localField': 'student_id', 
+                            'foreignField': '_id', 
+                            'as': 'result'
+                        }
+                    },  
+                    {
+                        '$lookup': {
+                            'from': 'class', 
+                            'localField': 'class_id', 
+                            'foreignField': '_id', 
+                            'as': 'class_result'
+                        }
+                    }, 
+                    {
+                        '$project': {
+                            'student_id': 1, 
+                            'amount': 1, 
+                            'name': {'$concat': [{'$arrayElemAt': ['$result.first_name', 0]}, ' ', {'$arrayElemAt': ['$result.last_name', 0]}]},
+                            'class_id': 1,
+                            'class_name': {
+                                '$arrayElemAt': [
+                                    '$class_result.name', 0
+                                ]
+                            }
+                        }
+                    }
+                ]))
+        return {"status" : True ,"message" : "Fees paid found" ,"data":json.loads(json.dumps(fees,default=str))}
     except Exception as e:
         return {"status" : False ,"message" : "Something wrong"}
 

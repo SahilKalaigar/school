@@ -1,3 +1,5 @@
+import pymongo
+import time
 client = pymongo.MongoClient('localhost', 27017)
 db = client["school"]
 
@@ -96,7 +98,24 @@ def create_subject():
     except Exception as e:
         print(e)
 
+def create_admin():
+    try:
+        db['admins'].insert_one({
+            "first_name": "Admin",
+            "last_name": "Admin",
+            "middle_name": "Admin",
+            "phone_number": "1234567890",
+            "address": "Admin",
+            "email": "admin@gmail.com",
+            "password": "123",
+            "created_at": int(time.time())
+        })
+        print("Admin created")
+    except Exception as e:
+        print(e)
+
 create_10_class()
 create_fee_structure()
 exams()
 create_subject()
+create_admin()

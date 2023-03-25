@@ -385,6 +385,57 @@ async def getFees(class_id,student_id):
         print(e)
         return {"status" : False ,"message" : "Something wrong"}
 
+# get student fees history (name , class name,amount , date,)
+@router.get("/fees_history/{student_id}")
+async def getFeesHistory(student_id):
+    try:
+        fees = list(db['student_fees'].aggregate([
+                {
+                    '$match': {
+                        'student_id': ObjectId(student_id)
+                    }
+                }, {
+                    '$lookup': {
+                        'from': 'students', 
+                        'localField': 'student_id', 
+                        'foreignField': '_id', 
+                        'as': 'result'
+                    }
+                }, {
+                    '$lookup': {
+                        'from': 'classes', 
+                        'localField': 'class_id', 
+                        'foreignField': '_id', 
+                        'as': 'class'
+                    }
+                }, {
+                    '$project': {
+                        '_id': 0, 
+                        'student_id': 1, 
+                        'class_id': 1, 
+                        'amount': 1, 
+                        'created_at': 1, 
+                        'name': {
+                            '$arrayElemAt': [
+                                '$result.first_name', 0
+                            ]
+                        }, 
+                        'class_name': {
+                            '$arrayElemAt': [
+                                '$class.name', 0
+                            ]
+                        }
+                    }
+                }
+            ]))
+        if len(fees) > 0:
+            return {"status" : True ,"message" : "Fees history found" ,"data":json.loads(json.dumps(fees,default=str))}
+        else:
+            return {"status" : False ,"message" : "Fees history not found" }
+    except Exception as e:
+        print(e)
+        return {"status" : False ,"message" : "Something wrong"}
+
 # save student marks
 @router.post("/marks")
 async def marks(request:Request):
