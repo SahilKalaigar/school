@@ -213,7 +213,8 @@ async def getStudents():
                         'dob': 1, 
                         'gender': 1, 
                         'address': 1, 
-                        'roll_number': 1
+                        'roll_number': 1,
+                        'password':1,
                     }
                 }
             ]))

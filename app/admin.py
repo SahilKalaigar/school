@@ -195,7 +195,7 @@ async def getExpenses():
 @router.get("/balance")
 async def getRemaining():
     try:
-        fees = list(db['fees_structure'].aggregate([
+        fees = list(db['student_fees'].aggregate([
                     {
                         '$group': {
                             '_id': None, 
