@@ -28,6 +28,34 @@ def generate_roll_number(class_id):
     return roll_number
 
 
+@router.get("/attendance")
+def getAllAttendance():
+    try:
+        attendance = list(db['student_attendance'].aggregate([
+            {
+                '$lookup': {
+                    'from': 'class', 
+                    'localField': 'class_id', 
+                    'foreignField': '_id', 
+                    'as': 'result'
+                }
+            }, {
+                '$project': {
+                    'class_id': 1, 
+                    'class_name': {
+                        '$arrayElemAt': [
+                            '$result.name', 0
+                        ]
+                    }, 
+                    'date': 1
+                }
+            }
+        ]))
+        return {"status" : True ,"message" : "Attendance found" ,"data":json.loads(json.dumps(attendance,default=str))}
+    except Exception as e:
+        print(e)
+        return {"status" : False ,"message" : "Something wrong"}
+
 @router.get("/generate_report")
 async def generate_report(response: Response):
     html = """
