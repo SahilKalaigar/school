@@ -3,13 +3,11 @@ import pymongo
 from bson import ObjectId
 import json
 import time
-
-from reportlab.lib.pagesizes import letter
-from reportlab.lib import colors
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle
-from reportlab.pdfgen import canvas
-import pdfkit
+import base64
+import matplotlib.pyplot as plt
+import matplotlib
+import pandas as pd
+import itertools
 
 app = FastAPI()
 router = APIRouter()
@@ -56,92 +54,220 @@ def getAllAttendance():
         print(e)
         return {"status" : False ,"message" : "Something wrong"}
 
-@router.get("/generate_report")
-async def generate_report(response: Response):
-    html = """
-        <html>
-            <head>
-                <title>Simple HTML Page</title>
-            </head>
-            <body>
-                <h1>Hello, World!</h1>
-                <p>This is a simple HTML page.</p>
-            </body>
-        </html>
-    """
-    response.headers["Content-Disposition"] = "attachment; filename=simple.pdf"
-    pdf = pdfkit.from_string(html, False)
-    response.headers["Content-Type"] = "application/pdf"
-    return Response(content=pdf, media_type="application/pdf")
-
-@router.get("/fees_report")
-async def feesReport(response: Response):
+# student performance report
+@router.get("/performance/{student_id}")
+def getPerformance(student_id):
     try:
-        fees = list(db['student_fees'].aggregate([
+        performance = list(db['student_marks'].aggregate([
             {
+                '$match':{
+                    'student_id':ObjectId(student_id)
+                }
+            },
+            {
+                '$unwind': {
+                    'path': '$marks'
+                }
+            }, {
                 '$lookup': {
                     'from': 'students', 
                     'localField': 'student_id', 
                     'foreignField': '_id', 
+                    'as': 'student_result'
+                }
+            }, {
+                '$lookup': {
+                    'from': 'subjects', 
+                    'localField': 'marks.subject_id', 
+                    'foreignField': '_id', 
                     'as': 'result'
                 }
-            },
-            {
+            }, {
+                '$lookup': {
+                    'from': 'exam', 
+                    'localField': 'exam_id', 
+                    'foreignField': '_id', 
+                    'as': 'exam_result'
+                }
+            }, {
                 '$lookup': {
                     'from': 'class', 
                     'localField': 'class_id', 
                     'foreignField': '_id', 
-                    'as': 'class'
+                    'as': 'class_result'
                 }
             }, {
                 '$project': {
-                    'student_id': '$_id', 
-                    'name': {
+                    'class_id': 1, 
+                    'exam_id': 1, 
+                    'marks': 1, 
+                    'subject_name': {
                         '$arrayElemAt': [
-                            '$result.first_name', 0
+                            '$result.name', 0
                         ]
                     }, 
-                    'amount': 1,
-                    'class': {
+                    'created_at': {
+                        '$toDate': {
+                            '$multiply': [
+                                {
+                                    '$toLong': '$created_at'
+                                }, 1000
+                            ]
+                        }
+                    }, 
+                    'class_name': {
                         '$arrayElemAt': [
-                            '$class.name', 0
+                            '$class_result.name', 0
                         ]
-                    },
-                    "created_at": 1
+                    }, 
+                    'student_name': {
+                        '$arrayElemAt': [
+                            '$student_result.first_name', 0
+                        ]
+                    }, 
+                    'exam_name': {
+                        '$arrayElemAt': [
+                            '$exam_result.name', 0
+                        ]
+                    }
+                }
+            }, {
+                '$group': {
+                    '_id': {
+                        'student_name': '$student_name'
+                    }, 
+                    'marks': {
+                        '$push': {
+                            'exam_name': '$exam_name', 
+                            'subject_name': '$subject_name', 
+                            'obtained_mark': '$marks.obtained_mark', 
+                            'out_of': '$marks.out_of'
+                        }
+                    }
                 }
             }
         ]))
-        response.headers["Content-Type"] = "application/pdf"
-        response.headers["Content-Disposition"] = 'attachment; filename="report.pdf"'
+        if not performance:
+            return {"status" : False ,"message" : "Data not found" ,"data":""}
+        matplotlib.pyplot.switch_backend('Agg')
+        df = pd.DataFrame(performance[0]['marks'])
 
-        doc = SimpleDocTemplate(response.body, pagesize=letter)
-        styles = getSampleStyleSheet()
-        data = fees
-        data_table = Table([list(data[0].keys())] + [[d[k] for k in d] for d in data])
-        print("data_table",data_table)
-        # Add table style
-        table_style = TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-            ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 14),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-            ('TEXTCOLOR', (0, 1), (-1, -1), colors.black),
-            ('ALIGN', (0, 1), (-1, -1), 'CENTER'),
-            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-            ('FONTSIZE', (0, 1), (-1, -1), 12),
-            ('BOTTOMPADDING', (0, 1), (-1, -1), 6),
-        ])
-        data_table.setStyle(table_style)
+        # Reshape the data using pivot
+        df_pivot = df.pivot(index="exam_name", columns="subject_name", values="obtained_mark")
 
-        # Build the PDF document
-        elements = []
-        elements.append(data_table)
-        doc.build(elements)
-        return response
-        # return {"status" : True ,"message" : "Fees report found" ,"data":json.loads(json.dumps(fees,default=str))}
+        # Create a bar chart
+        df_pivot.plot(kind="bar")
+        plt.xlabel("Exam")
+        plt.ylabel("Marks")
+        plt.title("Marks by Subject and Exam")
+        plt.show()
+        # Save the chart to a file
+        plt.savefig('./images/student_performance_report.png')
+
+        getAttendancePerformance(student_id)
+
+        # Get the list of marks
+        marks = performance[0]['marks']
+        # Group the marks by exam_name
+        grouped_marks = itertools.groupby(marks, lambda x: x['exam_name'])
+
+        # Create a dictionary to store the grouped data
+        grouped_data = {}
+        # Loop through the grouped marks
+        for exam_name, marks in grouped_marks:
+            # Convert the marks iterator to a list
+            marks = list(marks)
+            # Add the exam_name and marks to the grouped data dictionary
+            grouped_data[exam_name] = marks
+
+        return {"status" : True ,"message" : "Performance found" ,"data":json.loads(json.dumps(grouped_data,default=str)),"mark":base64.b64encode(open('./images/student_performance_report.png', 'rb').read()).decode('utf-8'),"attendance":base64.b64encode(open('./images/student_attendance_performance_report.png', 'rb').read()).decode('utf-8')}
+    except Exception as e:
+        print(e)
+        return {"status" : False ,"message" : "Something wrong"}
+
+#student attendance performance report
+@router.get("/attendance/performance/{student_id}")
+def getAttendancePerformance(student_id):
+    try:
+        performance = list(db['student_attendance'].aggregate([
+            {
+                '$unwind': {
+                    'path': '$attendance'
+                }
+            }, {
+                '$match': {
+                    'attendance.student_id': ObjectId(student_id)
+                }
+            }, {
+                '$lookup': {
+                    'from': 'class', 
+                    'localField': 'class_id', 
+                    'foreignField': '_id', 
+                    'as': 'result'
+                }
+            }, {
+                '$lookup': {
+                    'from': 'students', 
+                    'localField': 'attendance.student_id', 
+                    'foreignField': '_id', 
+                    'as': 'student_result'
+                }
+            }, {
+                '$project': {
+                    'class_id': 1, 
+                    'class_name': {
+                        '$arrayElemAt': [
+                            '$result.name', 0
+                        ]
+                    }, 
+                    'student_name': {
+                        '$arrayElemAt': [
+                            '$student_result.first_name', 0
+                        ]
+                    }, 
+                    'date': {
+                        '$toDate': '$date'
+                    }, 
+                    'attendance': 1
+                }
+            }, {
+                '$group': {
+                    '_id': {
+                        'month': {
+                            '$month': '$date'
+                        }, 
+                        'status': '$attendance.status'
+                    }, 
+                    'count': {
+                        '$sum': 1
+                    }
+                }
+            }, {
+                '$project': {
+                    'month': '$_id.month', 
+                    'status': '$_id.status', 
+                    'count': 1, 
+                    '_id': 0
+                }
+            }
+        ]))
+        if not performance:
+            return {"status" : False ,"message" : "Data not found" ,"data":""}
+        matplotlib.pyplot.switch_backend('Agg')
+        df = pd.DataFrame(performance)
+
+        # Reshape the data using pivot
+        df_pivot = df.pivot(index="month", columns="status", values="count")
+
+        # Create a bar chart
+        df_pivot.plot(kind="bar")
+        plt.xlabel("Month")
+        plt.ylabel("Days")
+        plt.title("Attendance by month")
+        plt.show()
+        # Save the chart to a file
+        plt.savefig('./images/student_attendance_performance_report.png')
+        return {"status" : True ,"message" : "Performance found" ,"data":json.loads(json.dumps(performance,default=str))}
     except Exception as e:
         print(e)
         return {"status" : False ,"message" : "Something wrong"}
@@ -661,5 +787,7 @@ def getMarks(student_id):
     except Exception as e:
         print(e)
         return {"status" : False ,"message" : "Something wrong"}
+
+
 
 
