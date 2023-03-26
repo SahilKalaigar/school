@@ -3,6 +3,10 @@ import pymongo
 from bson import ObjectId
 import json
 import time
+import matplotlib.pyplot as plt
+import matplotlib
+import pandas as pd
+import base64
 
 app = FastAPI()
 router = APIRouter()
@@ -151,7 +155,16 @@ async def getFeesPaid():
                                 '$arrayElemAt': [
                                     '$class_result.name', 0
                                 ]
-                            }
+                            },
+                            'created_at':{
+                                '$toDate': {
+                                '$multiply': [
+                                    { '$toLong': "$created_at" },
+                                    1000
+                                ]
+                                }
+                            },
+                            'category':1
                         }
                     }
                 ]))
@@ -219,6 +232,103 @@ async def getRemaining():
         total_expenses = expenses[0]['amount'] if expenses else 0
         remaining = total_fees - total_expenses
         return {"status" : True ,"message" : "Remaining amount found" ,"data":remaining}
+    except Exception as e:
+        print(e)
+        return {"status" : False ,"message" : "Something wrong"}
+
+# student mark report bar chart (subject name , class name , mark)
+@router.get("/mark/report")
+async def getMarkReport(request:Request):
+    try:
+        query = {}
+        # check student_id is present in query string 
+        if request.query_params.get('class_id') != "":
+            query['class_id'] = ObjectId(request.query_params.get('class_id'))
+        get = list(db['student_marks'].aggregate([
+            {
+                '$match':query
+            },
+            {
+                '$unwind': {
+                    'path': '$marks'
+                }
+            }, {
+                '$lookup': {
+                    'from': 'subjects', 
+                    'localField': 'marks.subject_id', 
+                    'foreignField': '_id', 
+                    'as': 'result'
+                }
+            }, {
+                '$lookup': {
+                    'from': 'class', 
+                    'localField': 'class_id', 
+                    'foreignField': '_id', 
+                    'as': 'class_result'
+                }
+            }, {
+                '$project': {
+                    'class_id': 1, 
+                    'exam_id': 1, 
+                    'marks': 1, 
+                    'subject_name': {
+                        '$arrayElemAt': [
+                            '$result.name', 0
+                        ]
+                    }, 
+                    'created_at': {
+                        '$toDate': {
+                            '$multiply': [
+                                {
+                                    '$toLong': '$created_at'
+                                }, 1000
+                            ]
+                        }
+                    }, 
+                    'class_name': {
+                        '$arrayElemAt': [
+                            '$class_result.name', 0
+                        ]
+                    }
+                }
+            }, {
+                '$group': {
+                    '_id': {
+                        'class_name': '$class_name', 
+                        'subject_name': '$subject_name'
+                    }, 
+                    'marks': {
+                        '$avg': '$marks.obtained_mark'
+                    }
+                }
+            }, {
+                '$project': {
+                    'class_name': '$_id.class_name', 
+                    'subject_name': '$_id.subject_name', 
+                    'marks': 1,
+                    '_id': 0
+                }
+            }
+        ]))
+        if not get:
+            return {"status" : False ,"message" : "Data not found" ,"data":""}
+        matplotlib.pyplot.switch_backend('Agg')
+        df = pd.DataFrame(get)
+
+        # Reshape the data using pivot
+        df_pivot = df.pivot(index="class_name", columns="subject_name", values="marks")
+
+        # Create a bar chart
+        df_pivot.plot(kind="bar")
+        plt.xlabel("Class")
+        plt.ylabel("Marks")
+        plt.title("Marks by Subject and Class")
+        plt.show()
+        # Save the chart to a file
+        plt.savefig('./images/class_wise_chart.png')
+
+        # return base64String of bar chart
+        return {"status" : True ,"message" : "Mark report found" ,"data":base64.b64encode(open('./images/class_wise_chart.png', 'rb').read()).decode('utf-8')}
     except Exception as e:
         print(e)
         return {"status" : False ,"message" : "Something wrong"}

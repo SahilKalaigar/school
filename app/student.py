@@ -8,13 +8,15 @@ from reportlab.lib.pagesizes import letter
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle
-from typing import List
+from reportlab.pdfgen import canvas
+import pdfkit
 
 app = FastAPI()
 router = APIRouter()
 
 client = pymongo.MongoClient('localhost', 27017)
 db = client["school"]
+
 
 #generate roll number function
 def generate_roll_number(class_id):
@@ -24,6 +26,25 @@ def generate_roll_number(class_id):
     else:
         roll_number = 1
     return roll_number
+
+
+@router.get("/generate_report")
+async def generate_report(response: Response):
+    html = """
+        <html>
+            <head>
+                <title>Simple HTML Page</title>
+            </head>
+            <body>
+                <h1>Hello, World!</h1>
+                <p>This is a simple HTML page.</p>
+            </body>
+        </html>
+    """
+    response.headers["Content-Disposition"] = "attachment; filename=simple.pdf"
+    pdf = pdfkit.from_string(html, False)
+    response.headers["Content-Type"] = "application/pdf"
+    return Response(content=pdf, media_type="application/pdf")
 
 @router.get("/fees_report")
 async def feesReport(response: Response):
@@ -215,6 +236,8 @@ async def getStudents():
                         'address': 1, 
                         'roll_number': 1,
                         'password':1,
+                        'class_id':1,
+                        'date_of_admission':1
                     }
                 }
             ]))
@@ -246,6 +269,7 @@ def getStudentByClass(id):
 async def updateStudent(id,request:Request):
     try:
         body = await request.json()
+        body['class_id'] = ObjectId(body['class_id'])
         db['students'].update_one({"_id":ObjectId(id)},{'$set':body})
         return {"status" : True ,"message" : "Student updated" }
     except Exception as e:
@@ -394,7 +418,16 @@ async def getAttendance(date,class_id):
                                         '$result.first_name', 0
                                     ]
                                 }, 
-                                'status': '$attendance.status'
+                                'status': '$attendance.status',
+                                'created_at': {
+                                    '$toDate': {
+                                        '$multiply': [
+                                            {
+                                                '$toLong': '$created_at'
+                                            }, 1000
+                                        ]
+                                    }
+                                }
                             }
                         }
                     }
@@ -411,7 +444,8 @@ async def getAttendance(date,class_id):
                                 '$push': {
                                     'student_id': '$_id', 
                                     'name': '$first_name', 
-                                    'status': 'present'
+                                    'status': 'present',
+                                    'created_at': date
                                 }
                             }
                         }

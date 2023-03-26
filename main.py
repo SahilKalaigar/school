@@ -7,7 +7,9 @@ from bson import ObjectId
 import json
 import time
 from fastapi.middleware.cors import CORSMiddleware
-
+import matplotlib.pyplot as plt
+import matplotlib
+import base64
 from app.student import router as student
 from app.subject import router as subject
 from app.student_class import router as classs
@@ -15,25 +17,40 @@ from app.staff import router as staff
 from app.admin import router as admin
 
 app = FastAPI()
-# app.mount("/images", StaticFiles(directory="images"), name="images")
-# origins = [
-#     "http://localhost",
-#     "http://localhost:8000",
-#     "http://localhost:3000",
-#     "http://localhost:8080",
-# ]
+app.mount("/images", StaticFiles(directory="images"), name="images")
+origins = [
+    "http://localhost",
+    "http://localhost:8000",
+    "http://localhost:3000",
+    "http://localhost:8080",
+    "*"
+]
 
-# app.add_middleware(
-#     CORSMiddleware,
-#     allow_origins=origins,
-#     allow_credentials=True,
-#     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH","OPTIONS"],
-#     allow_headers=["*"],
-# )
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH","OPTIONS"],
+    allow_headers=["*"],
+)
 
 client = pymongo.MongoClient('localhost', 27017)
 db = client["school"]
 
+@app.get("/barchart")
+def generate_barchart():
+    # Data for the chart
+    x = ['A', 'B', 'C', 'D', 'E']
+    y = [10, 5, 8, 12, 5]
+    matplotlib.pyplot.switch_backend('Agg')
+    # Create the bar chart
+    plt.bar(x, y)
+
+    # Save the chart to a file
+    plt.savefig('barchart.png')
+
+    # return base64String of bar chart
+    return base64.b64encode(open('barchart.png', 'rb').read()).decode('utf-8')
 
 @app.get("/")
 def read_root():
