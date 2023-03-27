@@ -15,6 +15,7 @@ from app.subject import router as subject
 from app.student_class import router as classs
 from app.staff import router as staff
 from app.admin import router as admin
+from app.prediction import router as prediction
 
 app = FastAPI()
 app.mount("/images", StaticFiles(directory="images"), name="images")
@@ -70,6 +71,7 @@ app.include_router(subject, prefix="/subject", tags=["subject"])
 app.include_router(classs, prefix="/class", tags=["class"])
 app.include_router(staff, prefix="/staff", tags=["staff"])
 app.include_router(admin, prefix="/admin", tags=["admin"])
+app.include_router(prediction, prefix="/prediction", tags=["prediction"])
 
 
 if __name__ == "__main__":
