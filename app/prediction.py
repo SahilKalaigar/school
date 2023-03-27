@@ -50,6 +50,6 @@ async def get(request:Request):
         predict = reg.predict([[body['current_mark'],body['attendance'] ,body['extra_activities'] ]])
         predict = int(list(predict)[0])
 
-        return {"status" : True ,"message" : "Prediction found" ,"data":json.loads(json.dumps(predict,default=str))}
+        return {"status" : True ,"message" : "Prediction found" ,"data":"Predicted marks is "+str(predict)+"%"}
     except Exception as e:
         return {"status" : False ,"message" : "Something wrong"}
