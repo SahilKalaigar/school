@@ -55,13 +55,14 @@ def getAllAttendance():
         return {"status" : False ,"message" : "Something wrong"}
 
 # student performance report
-@router.get("/performance/{student_id}")
-def getPerformance(student_id):
+@router.get("/performance/{student_id}/{class_id}")
+def getPerformance(student_id,class_id):
     try:
         performance = list(db['student_marks'].aggregate([
             {
                 '$match':{
-                    'student_id':ObjectId(student_id)
+                    'student_id':ObjectId(student_id),
+                    'class_id':ObjectId(class_id)
                 }
             },
             {
@@ -121,8 +122,16 @@ def getPerformance(student_id):
                         ]
                     }, 
                     'student_name': {
-                        '$arrayElemAt': [
-                            '$student_result.first_name', 0
+                        '$concat': [
+                            {
+                                '$arrayElemAt': [
+                                    '$student_result.first_name', 0
+                                ]
+                            }, ' ', {
+                                '$arrayElemAt': [
+                                    '$student_result.last_name', 0
+                                ]
+                            }
                         ]
                     }, 
                     'exam_name': {
@@ -337,7 +346,10 @@ async def getMarks(request:Request):
                     }, 
                     'out_of': {
                         '$sum': '$marks.out_of'
-                    }
+                    },
+                    'class_id': 1,
+                    'exam_id': 1,
+                    'student_id': 1
                 }
             }
         ]))
