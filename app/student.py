@@ -6,8 +6,12 @@ import time
 import base64
 import matplotlib.pyplot as plt
 import matplotlib
-import pandas as pd
 import itertools
+
+import pandas as pd
+import numpy as np
+from sklearn.linear_model import LinearRegression
+from sklearn.model_selection import train_test_split
 
 app = FastAPI()
 router = APIRouter()
@@ -25,6 +29,158 @@ def generate_roll_number(class_id):
         roll_number = 1
     return roll_number
 
+def getPrediction(current_mark,attendance,extra_activities):
+    try:
+        # Load the data into a pandas dataframe
+        data = {'Current Marks': [90, 85, 80, 75, 70, 65, 60, 55, 50, 45, 40, 35, 30, 25, 20, 15, 10, 5, 0],
+                'Attendance': [95, 85, 80, 90, 70, 75, 65, 70, 80, 75, 85, 80, 90, 70, 75, 65, 70, 80, 75],
+                'Extra Activities': [1, 1, 1, 0, 0, 0, 1, 1, 1, 0, 0, 0, 1, 1, 1, 0, 0, 0, 1],
+                'Final Marks': [92, 87, 82, 77, 72, 68, 63, 58, 53, 49, 44, 39, 34, 29, 24, 19, 14, 9, 4]}
+
+        df = pd.DataFrame(data)
+        print(len(data['Current Marks']))
+        # Split the data into training and testing sets
+        X = df[['Current Marks', 'Attendance', 'Extra Activities']]
+        y = df['Final Marks']
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
+
+        # Train the linear regression model
+        reg = LinearRegression().fit(X_train, y_train)
+
+        # Make predictions on the test data
+        y_pred = reg.predict(X_test)
+
+        # Evaluate the model's accuracy
+        # r2 = reg.score(X_test, y_test)
+        # print("R2 Score:", r2)
+
+        # check accuracy in integer 
+        # print("R2 Score:", int(r2*100))
+
+        # check prediction of given data
+        # print("Prediction:", reg.predict([[90, 95, 1]]))
+        # print("Prediction:", reg.predict([[45, 30, 1]]))
+        predict = reg.predict([[current_mark, attendance, extra_activities ]])
+        predict = int(list(predict)[0])
+
+        return {"status" : True ,"message" : "Prediction found" ,"data":"Predicted marks is "+str(predict)+"%"}
+    except Exception as e:
+        return {"status" : False ,"message" : "Something wrong"}
+
+def getAttendancePerformanceFun(student_id):
+    try:
+        performance = list(db['student_attendance'].aggregate([
+            {
+                '$unwind': {
+                    'path': '$attendance'
+                }
+            }, {
+                '$match': {
+                    'attendance.student_id': ObjectId(student_id)
+                }
+            }, {
+                '$lookup': {
+                    'from': 'class', 
+                    'localField': 'class_id', 
+                    'foreignField': '_id', 
+                    'as': 'result'
+                }
+            }, {
+                '$lookup': {
+                    'from': 'students', 
+                    'localField': 'attendance.student_id', 
+                    'foreignField': '_id', 
+                    'as': 'student_result'
+                }
+            }, {
+                '$project': {
+                    'class_id': 1, 
+                    'class_name': {
+                        '$arrayElemAt': [
+                            '$result.name', 0
+                        ]
+                    }, 
+                    'student_name': {
+                        '$arrayElemAt': [
+                            '$student_result.first_name', 0
+                        ]
+                    }, 
+                    'date': {
+                        '$toDate': '$date'
+                    }, 
+                    'attendance': 1
+                }
+            }, {
+                '$group': {
+                    '_id': {
+                        'month': {
+                            '$month': '$date'
+                        }, 
+                        'status': '$attendance.status'
+                    }, 
+                    'count': {
+                        '$sum': 1
+                    }
+                }
+            }, {
+                '$project': {
+                    'month': '$_id.month', 
+                    'status': '$_id.status', 
+                    'count': 1, 
+                    '_id': 0
+                }
+            }
+        ]))
+        if not performance:
+            return {"status" : False ,"message" : "Data not found" ,"data":""}
+        #avargae attendance percentage of student
+        total_days = 0
+        present_days = 0
+        month = []
+        absent = []
+        present = []
+        for i in performance:
+            if i['status'] == 'present':
+                present_days += i['count']
+            total_days += i['count']
+        attendance_percentage = (present_days/total_days)*100 
+        # group performance array by month
+        performance = sorted(performance, key=lambda k: k['month'])
+        performance = [list(v) for k, v in itertools.groupby(performance, key=lambda k: k['month'])]
+        # months in string
+        months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+        absent = [0] * 12  # Initialize absent list with 0 for all 12 months
+        present = [0] * 12  # Initialize present list with 0 for all 12 months
+
+        for item in performance:
+            for record in item:
+                if record['status'] == 'absent':
+                    absent[record['month'] - 1] = record['count']
+                elif record['status'] == 'present':
+                    present[record['month'] - 1] = record['count']  
+        matplotlib.pyplot.switch_backend('Agg')
+        # df = pd.DataFrame(performance)
+        
+        # Plot the data
+        plt.plot(months, absent, label='Absent')
+        plt.plot(months, present, label='Present')
+
+        # Set the chart title and labels
+        plt.title('Absent-Present Chart')
+        plt.xlabel('Month')
+        plt.ylabel('Percentage')
+
+        # Show the legend
+        plt.legend()
+
+        # Show the chart
+        # plt.show()
+
+        plt.savefig('./images/student_attendance_performance_report.png')
+        return attendance_percentage
+    except Exception as e:
+        print(e)
+        return {"status" : False ,"message" : "Something wrong"}
 
 @router.get("/attendance")
 def getAllAttendance():
@@ -173,7 +329,7 @@ def getPerformance(student_id,class_id):
         # Save the chart to a file
         plt.savefig('./images/student_performance_report.png')
 
-        getAttendancePerformance(student_id)
+        attendance_percentage = getAttendancePerformanceFun(student_id)
 
         # Get the list of marks
         marks = performance[0]['marks']
@@ -182,14 +338,24 @@ def getPerformance(student_id,class_id):
 
         # Create a dictionary to store the grouped data
         grouped_data = {}
+        total_mark = 0
+        total_obtained_mark = 0
         # Loop through the grouped marks
         for exam_name, marks in grouped_marks:
             # Convert the marks iterator to a list
             marks = list(marks)
             # Add the exam_name and marks to the grouped data dictionary
             grouped_data[exam_name] = marks
-
-        return {"status" : True ,"message" : "Performance found" ,"data":json.loads(json.dumps(grouped_data,default=str)),"mark":base64.b64encode(open('./images/student_performance_report.png', 'rb').read()).decode('utf-8'),"attendance":base64.b64encode(open('./images/student_attendance_performance_report.png', 'rb').read()).decode('utf-8')}
+            # Loop through the marks
+            for mark in marks:
+                # Add the mark to the total
+                total_mark += mark['out_of']
+                total_obtained_mark += mark['obtained_mark']
+        # Calculate the average
+        average = total_obtained_mark / total_mark * 100
+        # call prediction function
+        prediction = getPrediction(average,attendance_percentage,1)
+        return {"status" : True ,"message" : "Performance found" ,"data":json.loads(json.dumps(grouped_data,default=str)),"prediction":prediction['data'],"mark":base64.b64encode(open('./images/student_performance_report.png', 'rb').read()).decode('utf-8'),"attendance":base64.b64encode(open('./images/student_attendance_performance_report.png', 'rb').read()).decode('utf-8')}
     except Exception as e:
         print(e)
         return {"status" : False ,"message" : "Something wrong"}
@@ -262,6 +428,14 @@ def getAttendancePerformance(student_id):
         ]))
         if not performance:
             return {"status" : False ,"message" : "Data not found" ,"data":""}
+        #avargae attendance percentage of student
+        total_days = 0
+        present_days = 0
+        for i in performance:
+            if i['status'] == 'present':
+                present_days += i['count']
+            total_days += i['count']
+        attendance_percentage = (present_days/total_days)*100 
         matplotlib.pyplot.switch_backend('Agg')
         df = pd.DataFrame(performance)
 
@@ -603,6 +777,11 @@ async def getAttendance(date,class_id):
             return {"status" : True ,"message" : "Attendance found" ,"data":json.loads(json.dumps(attendance[0],default=str))}
         else:
             attendance = list(db['students'].aggregate([
+                    {
+                        '$match': {
+                            'class_id': ObjectId(class_id)
+                        }
+                    },
                     {
                         '$group': {
                             '_id': '$class_id', 
