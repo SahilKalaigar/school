@@ -577,7 +577,8 @@ async def getStudents():
                         'roll_number': 1,
                         'password':1,
                         'class_id':1,
-                        'date_of_admission':1
+                        'date_of_admission':1,
+                        'academic_year':1
                     }
                 }
             ]))

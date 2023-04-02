@@ -19,6 +19,7 @@ from app.prediction import router as prediction
 
 app = FastAPI()
 app.mount("/images", StaticFiles(directory="images"), name="images")
+app.mount("/files", StaticFiles(directory="files"), name="files")
 origins = [
     "http://localhost",
     "http://localhost:8000",

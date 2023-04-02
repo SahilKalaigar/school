@@ -173,7 +173,7 @@ async def getFeesPaid():
         return {"status" : False ,"message" : "Something wrong"}
 
 # update fees structure
-@router.put("/fees/{id}")
+@router.post("/fees/update/{id}")
 async def updateFees(id,request:Request):
     try:
         body = await request.json()
@@ -231,7 +231,7 @@ async def getRemaining():
         total_fees = fees[0]['amount'] if fees else 0
         total_expenses = expenses[0]['amount'] if expenses else 0
         remaining = total_fees - total_expenses
-        return {"status" : True ,"message" : "Remaining amount found" ,"data":remaining}
+        return {"status" : True ,"message" : "Remaining amount found" ,"data":remaining,"total_collected":total_fees,"total_expenses":total_expenses}
     except Exception as e:
         print(e)
         return {"status" : False ,"message" : "Something wrong"}
@@ -333,3 +333,24 @@ async def getMarkReport(request:Request):
         print(e)
         return {"status" : False ,"message" : "Something wrong"}
 
+# create notice board
+@router.post("/notice")
+async def createNotice(request:Request):
+    try:
+        body = await request.json()
+        body['created_at'] = int(time.time())
+        db['notices'].insert_one(body)
+        return {"status" : True ,"message" : "Notice created" }
+    except Exception as e:
+        print(e)
+        return {"status" : False ,"message" : "Something wrong"}
+
+# get all notices
+@router.get("/notice")
+async def getNotice(request:Request):
+    try:
+        notices = list(db['notices'].find({"to":{'$in':json.loads(request.query_params.get('type'))}}))
+        return {"status" : True ,"message" : "Notice found" ,"data":json.loads(json.dumps(notices,default=str))}
+    except Exception as e:
+        print(e)
+        return {"status" : False ,"message" : "Something wrong"}

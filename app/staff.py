@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter,Request
+from fastapi import FastAPI, APIRouter,Request, File, UploadFile,Form
 import pymongo
 from bson import ObjectId
 import json
@@ -9,6 +9,39 @@ router = APIRouter()
 
 client = pymongo.MongoClient('localhost', 27017)
 db = client["school"]
+
+# get study material
+@router.get("/study_material")
+async def getStudyMaterial():
+    try:
+        study_material = list(db['study_material'].aggregate([
+            {
+                '$lookup': {
+                    'from': 'staff', 
+                    'localField': 'staff_id', 
+                    'foreignField': '_id', 
+                    'as': 'result'
+                }
+            }, {
+                '$project': {
+                    'staff_name': {
+                        '$concat': [
+                            '$arrayElemAt', [
+                                '$result.first_name', 0
+                            ], ' ', '$arrayElemAt', [
+                                '$result.last_name', 0
+                            ]
+                        ]
+                    },
+                    'file': {'$concat': ['http://localhost:80/files/', '$file']},
+                    'created_at': 1
+                    }
+                }
+        ]))
+        return {"status" : True ,"message" : "Study material found" ,"data":json.loads(json.dumps(study_material,default=str))}
+    except Exception as e:
+        print(e)
+        return {"status" : False ,"message" : "Something wrong"}
 
 # save staff 
 @router.post("/")
@@ -101,4 +134,25 @@ async def attendance(request:Request):
     except Exception as e:
         print(e)
         return {"status" : False ,"message" : "Something wrong"}
+
+# share study material
+@router.post("/share")
+async def share(file: UploadFile, staff_id: str = Form(...),description: str = Form(...)):
+    try:
+        # save file
+        file_name = file.filename
+        file_path = "files/"+file_name
+        with open(file_path, "wb") as buffer:
+            buffer.write(file.file.read())
+        # save data
+        body = {}
+        body['file'] = file_name
+        body['staff_id'] = ObjectId(staff_id)
+        body['created_at'] = int(time.time())
+        db['study_material'].insert_one(body)
+        return {"status" : True ,"message" : "Study material added" }
+    except Exception as e:
+        print(e)
+        return {"status" : False ,"message" : "Something wrong"}
+
 
