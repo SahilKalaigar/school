@@ -349,7 +349,10 @@ async def createNotice(request:Request):
 @router.get("/notice")
 async def getNotice(request:Request):
     try:
-        notices = list(db['notices'].find({"to":{'$in':json.loads(request.query_params.get('type'))}}))
+        #convert comma seprarated string to list
+        to = request.query_params.get('type').split(',')
+        print(to)
+        notices = list(db['notices'].find({"to":{'$in':to}}))
         return {"status" : True ,"message" : "Notice found" ,"data":json.loads(json.dumps(notices,default=str))}
     except Exception as e:
         print(e)

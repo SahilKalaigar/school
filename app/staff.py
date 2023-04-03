@@ -22,19 +22,29 @@ async def getStudyMaterial():
                     'foreignField': '_id', 
                     'as': 'result'
                 }
-            }, {
+            },
+            {
+                '$lookup': {
+                    'from': 'class',
+                    'localField': 'class_id',
+                    'foreignField': '_id',
+                    'as': 'class'
+                }
+            },
+            {
                 '$project': {
                     'staff_name': {
                         '$concat': [
-                            '$arrayElemAt', [
+                            {'$arrayElemAt': [
                                 '$result.first_name', 0
-                            ], ' ', '$arrayElemAt', [
+                            ]}, ' ', {'$arrayElemAt': [
                                 '$result.last_name', 0
-                            ]
+                            ]}
                         ]
                     },
-                    'file': {'$concat': ['http://localhost:80/files/', '$file']},
-                    'created_at': 1
+                    'file': {'$concat': ['http://192.168.1.106:80/files/', '$file']},
+                    'created_at': 1,
+                    'class_name': { '$arrayElemAt': [ '$class.name', 0 ] },
                     }
                 }
         ]))
@@ -137,7 +147,7 @@ async def attendance(request:Request):
 
 # share study material
 @router.post("/share")
-async def share(file: UploadFile, staff_id: str = Form(...),description: str = Form(...)):
+async def share(file: UploadFile, staff_id: str = Form(...),description: str = Form(...),class_id: str = Form(...)):
     try:
         # save file
         file_name = file.filename
@@ -148,6 +158,7 @@ async def share(file: UploadFile, staff_id: str = Form(...),description: str = F
         body = {}
         body['file'] = file_name
         body['staff_id'] = ObjectId(staff_id)
+        body['class_id'] = ObjectId(class_id)
         body['created_at'] = int(time.time())
         db['study_material'].insert_one(body)
         return {"status" : True ,"message" : "Study material added" }
