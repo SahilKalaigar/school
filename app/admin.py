@@ -87,6 +87,9 @@ async def deleteExam(id):
 async def saveFees(request:Request):
     try:
         body = await request.json()
+        check = db['fees_structure'].find_one({"class_id":ObjectId(body['class_id'])})
+        if check:
+            return {"status" : False ,"message" : "Fees structure already added for this class" }
         body['class_id'] = ObjectId(body['class_id'])
         body['created_at'] = int(time.time())
         db['fees_structure'].insert_one(body)
